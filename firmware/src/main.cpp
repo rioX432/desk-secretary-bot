@@ -26,6 +26,7 @@
 #include <ArduinoJson.h>
 #include "SpiRamJsonDocument.h"
 #include <ESP8266FtpServer.h>
+#include "SerialCommand.h"
 
 #include "llm/ChatGPT/ChatGPT.h"
 #include "llm/ChatGPT/FunctionCall.h"
@@ -562,7 +563,9 @@ void loop()
     web_server_handle_client();
     ftpSrv.handleFTP();
   }
-  
+
+  handleSerialCommand();
+
   //reset_watchdog();
 }
 

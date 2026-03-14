@@ -15,9 +15,9 @@ allowed-tools:
   - Bash(git branch:*)
   - Bash(cd firmware && ~/.platformio/penv/bin/pio *)
   - Bash(~/.platformio/penv/bin/pio *)
-  - Bash(gh pr create:*)
-  - Bash(gh issue view:*)
-  - Bash(gh issue comment:*)
+  - Bash(gh pr create --repo rioX432/desk-secretary-bot:*)
+  - Bash(gh issue view --repo rioX432/desk-secretary-bot:*)
+  - Bash(gh issue comment --repo rioX432/desk-secretary-bot:*)
   - Glob
   - Grep
   - Read
@@ -58,7 +58,7 @@ Use `TaskUpdate` to mark each task `in_progress` when starting and `completed` w
 ### 1a. Issue Context
 
 **GitHub Issue** (starts with `#`):
-1. Run `gh issue view <number> --json number,title,body,labels`
+1. Run `gh issue view <number> --repo rioX432/desk-secretary-bot --json number,title,body,labels`
 2. Extract: title, description, acceptance criteria, labels
 
 **Branch naming** (from labels or issue type):
@@ -192,7 +192,7 @@ git push -u origin {branch-name}
 ```
 
 ```bash
-gh pr create --title "{PR title}" --body "$(cat <<'EOF'
+gh pr create --repo rioX432/desk-secretary-bot --title "{PR title}" --body "$(cat <<'EOF'
 ## Description
 
 - {bullet point summary}
