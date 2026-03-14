@@ -56,12 +56,16 @@ static void cmdWrite(const char* path) {
   }
 
   Serial.println("READY");
+  Serial.setTimeout(5000);  // Increase timeout for long lines
 
   size_t totalBytes = 0;
   while (true) {
     if (Serial.available()) {
       String line = Serial.readStringUntil('\n');
-      line.trim();
+      // Remove only trailing \r, preserve leading spaces (YAML indentation)
+      if (line.endsWith("\r")) {
+        line.remove(line.length() - 1);
+      }
       if (line == "END") {
         break;
       }
@@ -74,6 +78,8 @@ static void cmdWrite(const char* path) {
     }
     delay(1);
   }
+
+  Serial.setTimeout(1000);  // Restore default timeout
 
   file.close();
   Serial.printf("OK: %d bytes written to %s\n", totalBytes, path);
