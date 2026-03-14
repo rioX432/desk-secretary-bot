@@ -560,6 +560,18 @@ void loop()
 #endif
 
   if(!isOffline){
+    // Reconnect WiFi if disconnected (non-blocking, short timeout)
+    static unsigned long lastWifiCheck = 0;
+    if (WiFi.status() != WL_CONNECTED && (millis() - lastWifiCheck > 15000)) {
+      lastWifiCheck = millis();
+      Serial.println("[WiFi] Disconnected. Attempting reconnect...");
+      if (wifiMulti.run(5000) == WL_CONNECTED) {
+        Serial.printf("[WiFi] Reconnected to: %s\n", WiFi.SSID().c_str());
+      } else {
+        Serial.println("[WiFi] Reconnect failed. Will retry in 15s.");
+      }
+    }
+
     web_server_handle_client();
     ftpSrv.handleFTP();
   }
