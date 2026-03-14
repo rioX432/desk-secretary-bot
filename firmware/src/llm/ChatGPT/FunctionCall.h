@@ -7,7 +7,7 @@
 #include "MCPClient.h"
 #include "llm/LLMBase.h"
 
-//#define USE_EXTENSION_FUNCTIONS
+#define USE_EXTENSION_FUNCTIONS
 
 #define APP_DATA_PATH   "/app/AiStackChanEx/"
 #define FNAME_NOTEPAD   "notepad.txt"
@@ -61,6 +61,11 @@ public:
     #if defined(USE_EXTENSION_FUNCTIONS)
     String reminder(int hour, int min, const char* text);
     String ask(const char* text);
+    String save_note(const char* text);
+    String read_note();
+    String delete_note();
+    String get_bus_time(int nNext);
+    // send_mail / read_mail are excluded until EMailSender library is configured
     #endif  //USE_EXTENSION_FUNCTIONS
 };
 

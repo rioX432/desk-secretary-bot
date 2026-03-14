@@ -24,6 +24,9 @@ extern void sw_tone();
 
 static String avatarText;
 
+// Notepad content for save_note/read_note/delete_note
+String note = "";
+
 // タイマー機能関連
 TimerHandle_t xAlarmTimer;
 bool alarmTimerCallbacked = false;
@@ -178,6 +181,36 @@ const String json_Functions =
       "}"
     "}"
   "},"
+  "{"
+    "\"name\": \"save_note\","
+    "\"description\": \"メモを保存する。買い物リストやTODOなど。\","
+    "\"parameters\": {"
+      "\"type\":\"object\","
+      "\"properties\": {"
+        "\"text\":{"
+          "\"type\": \"string\","
+          "\"description\": \"メモの内容\""
+        "}"
+      "},"
+      "\"required\": [\"text\"]"
+    "}"
+  "},"
+  "{"
+    "\"name\": \"read_note\","
+    "\"description\": \"保存されているメモを読み上げる。\","
+    "\"parameters\": {"
+      "\"type\":\"object\","
+      "\"properties\": {}"
+    "}"
+  "},"
+  "{"
+    "\"name\": \"delete_note\","
+    "\"description\": \"保存されているメモを消去する。\","
+    "\"parameters\": {"
+      "\"type\":\"object\","
+      "\"properties\": {}"
+    "}"
+  "}"
 #endif //if defined(USE_EXTENSION_FUNCTIONS)
 "]";
 
@@ -294,6 +327,16 @@ String FunctionCall::exec_calledFunc(const char* name, const char* args){
       const char* text = argsDoc["text"];
       Serial.println(text);
       response = ask(text);
+    }
+    else if(strcmp(name, "save_note") == 0){
+      const char* text = argsDoc["text"];
+      response = save_note(text);
+    }
+    else if(strcmp(name, "read_note") == 0){
+      response = read_note();
+    }
+    else if(strcmp(name, "delete_note") == 0){
+      response = delete_note();
     }
 #endif  //if defined(USE_EXTENSION_FUNCTIONS)
 
@@ -655,8 +698,9 @@ String FunctionCall::get_bus_time(int nNext){
 }
 
 
-//メッセージをメールで送信する関数
-// ※EMailSenderライブラリのインクルード、及びplatformio.iniのlib_depsでの宣言を有効化してください。
+// TODO: send_mail requires EMailSender library and mail config — excluded for now
+// See GitHub Issue #13 (Gmail連携) for future implementation
+#if 0
 String FunctionCall::send_mail(String msg) {
   String response = "";
   EMailSender::EMailMessage message;
@@ -684,8 +728,11 @@ String FunctionCall::send_mail(String msg) {
 
   return response;
 }
+#endif
 
-//受信したメールを読み上げる
+// TODO: read_mail requires mail receiver setup — excluded for now
+// See GitHub Issue #13 (Gmail連携) for future implementation
+#if 0
 String FunctionCall::read_mail(void) {
   String response = "";
 
@@ -697,9 +744,10 @@ String FunctionCall::read_mail(void) {
   else{
     response = "受信メールはありません。";
   }
-  
+
   return response;
 }
+#endif
 
 
 #endif  //if defined(USE_EXTENSION_FUNCTIONS)
