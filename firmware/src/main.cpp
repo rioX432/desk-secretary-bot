@@ -22,6 +22,7 @@
 
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
+#include <WiFiMulti.h>
 #include <ArduinoJson.h>
 #include "SpiRamJsonDocument.h"
 #include <ESP8266FtpServer.h>
@@ -70,6 +71,7 @@ const Expression expressions_table[] = {
 };
 
 FtpServer ftpSrv;   //set #define FTP_DEBUG in ESP8266FtpServer.h to see ftp verbose on serial
+WiFiMulti wifiMulti;
 
 
 // Called when a metadata event occurs (i.e. an ID3 tag, an ICY block, etc.
@@ -168,7 +170,46 @@ void battery_check(void *args) {
   }
 }
 
-//void Wifi_setup() {
+// Load WiFi networks from SC_SecConfig.yaml (networks: list) into WiFiMulti.
+// Falls back to single ssid/password if networks: is not present.
+// Returns the number of networks added.
+int loadWiFiNetworks(WiFiMulti& wm) {
+  int count = 0;
+
+  // Try to read networks list from SC_SecConfig.yaml
+  File file = SD.open("/yaml/SC_SecConfig.yaml", FILE_READ);
+  if (file) {
+    DynamicJsonDocument doc(2048);
+    auto err = deserializeYml(doc, file);
+    file.close();
+
+    if (!err && doc["wifi"]["networks"].is<JsonArray>()) {
+      JsonArray networks = doc["wifi"]["networks"];
+      for (JsonObject net : networks) {
+        const char* ssid = net["ssid"];
+        const char* pass = net["password"];
+        if (ssid && strlen(ssid) > 0) {
+          wm.addAP(ssid, pass);
+          Serial.printf("[WiFi] Added network: %s\n", ssid);
+          count++;
+        }
+      }
+    }
+  }
+
+  // Fallback: use single ssid/password from parsed config
+  if (count == 0) {
+    wifi_s* wifi_info = system_config.getWiFiSetting();
+    if (wifi_info->ssid.length() > 0) {
+      wm.addAP(wifi_info->ssid.c_str(), wifi_info->password.c_str());
+      Serial.printf("[WiFi] Added network (legacy): %s\n", wifi_info->ssid.c_str());
+      count = 1;
+    }
+  }
+
+  return count;
+}
+
 bool Wifi_connection_check() {
   unsigned long start_millis = millis();
 
@@ -355,12 +396,11 @@ void setup()
     // この関数ですべてのYAMLファイル(Basic, Secret, Extend)を読み込む
     system_config.loadConfig(SD, "/app/AiStackChanEx/SC_ExConfig.yaml");
 #endif
-    // Wifi設定読み込み
-    wifi_s* wifi_info = system_config.getWiFiSetting();
-    Serial.printf("\nSSID: %s\n",wifi_info->ssid.c_str());
-    Serial.printf("Key: %s\n",wifi_info->password.c_str());
+    // WiFi設定読み込み（WiFiMulti対応）
+    int nNetworks = loadWiFiNetworks(wifiMulti);
+    Serial.printf("[WiFi] %d network(s) configured\n", nNetworks);
 
-    if(wifi_info->ssid.length() == 0){
+    if(nNetworks == 0){
       M5.Lcd.print("Can't get WiFi settings. Start offline mode.\n");
       isOffline = true;
     }
@@ -371,8 +411,8 @@ void setup()
       WiFi.disconnect();
       WiFi.softAPdisconnect(true);
       WiFi.mode(WIFI_STA);
-      WiFi.begin(wifi_info->ssid.c_str(), wifi_info->password.c_str());
-      if(Wifi_connection_check()){
+      if(wifiMulti.run(10000) == WL_CONNECTED){
+        Serial.printf("[WiFi] Connected to: %s\n", WiFi.SSID().c_str());
         M5.Lcd.println("\nConnected");
         Serial.printf_P(PSTR("Go to http://"));
         M5.Lcd.print("Go to http://");
