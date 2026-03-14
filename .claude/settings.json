@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cd firmware && ~/.platformio/penv/bin/pio *)",
+      "Bash(~/.platformio/penv/bin/pio *)",
+      "Bash(gh *)"
+    ]
+  }
+}
