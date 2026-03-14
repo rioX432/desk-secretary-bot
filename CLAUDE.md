@@ -24,6 +24,12 @@ Before acting, always pause and reconsider. Re-read the requirements, re-check y
 - Commit messages: Japanese OK (this is a personal project)
 - PR descriptions: Japanese OK
 
+## GitHub
+
+- **Issue/PR 操作は必ず `--repo rioX432/desk-secretary-bot` を指定すること**
+- `gh issue` / `gh pr` コマンドをオプションなしで実行すると upstream (`ronron-gh/AI_StackChan_Ex`) を参照してしまう
+- 例: `gh issue view 1 --repo rioX432/desk-secretary-bot`
+
 ## Key Gotchas
 
 - PlatformIO CLI is at `~/.platformio/penv/bin/pio`, NOT in default PATH

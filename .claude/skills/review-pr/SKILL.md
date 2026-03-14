@@ -12,7 +12,7 @@ Review the specified pull request (number or URL as argument).
 
 ## Steps
 
-1. **Get PR info**: Run `gh pr view <number> --json number,title,body,baseRefName,headRefName,files` to get PR metadata and changed files.
+1. **Get PR info**: Run `gh pr view <number> --repo rioX432/desk-secretary-bot --json number,title,body,baseRefName,headRefName,files` to get PR metadata and changed files.
 2. **Checkout the branch**: Run `git fetch origin <headRefName> && git checkout <headRefName>` to get the actual code.
 3. **Read changed files**: Read each changed file in full to understand context — don't rely on diff alone.
 4. **Launch reviewers in parallel**: Based on changed file types, use the Task tool to launch reviewer subagents **in parallel**:
