@@ -1,11 +1,22 @@
 #include <Arduino.h>
 #include <SD.h>
+#include <SPI.h>
 #include "SerialCommand.h"
 
 static const char* TAG = "[SerialCmd]";
 
+// Ensure SD card is mounted before operations
+static bool ensureSD() {
+  if (SD.begin(GPIO_NUM_4, SPI, 25000000)) {
+    return true;
+  }
+  Serial.printf("%s ERROR: Failed to mount SD card\n", TAG);
+  return false;
+}
+
 // List files in a directory
 static void cmdList(const char* path) {
+  if (!ensureSD()) return;
   File dir = SD.open(path);
   if (!dir) {
     Serial.printf("ERROR: Cannot open directory: %s\n", path);
@@ -33,6 +44,7 @@ static void cmdList(const char* path) {
 
 // Read and print file contents
 static void cmdRead(const char* path) {
+  if (!ensureSD()) return;
   File file = SD.open(path, FILE_READ);
   if (!file) {
     Serial.printf("ERROR: Cannot open file: %s\n", path);
@@ -49,6 +61,16 @@ static void cmdRead(const char* path) {
 
 // Write content received line-by-line until "END" marker
 static void cmdWrite(const char* path) {
+  if (!ensureSD()) return;
+  // Auto-create parent directory if needed
+  String pathStr(path);
+  int lastSlash = pathStr.lastIndexOf('/');
+  if (lastSlash > 0) {
+    String dir = pathStr.substring(0, lastSlash);
+    if (!SD.exists(dir.c_str())) {
+      SD.mkdir(dir.c_str());
+    }
+  }
   File file = SD.open(path, FILE_WRITE);
   if (!file) {
     Serial.printf("ERROR: Cannot open file for writing: %s\n", path);
@@ -87,6 +109,7 @@ static void cmdWrite(const char* path) {
 
 // Delete a file
 static void cmdDelete(const char* path) {
+  if (!ensureSD()) return;
   if (!SD.exists(path)) {
     Serial.printf("ERROR: File not found: %s\n", path);
     return;
