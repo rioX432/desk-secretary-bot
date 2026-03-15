@@ -4,14 +4,17 @@
 #include <AudioGeneratorMP3.h>
 #include "driver/AudioOutputM5Speaker.h"
 #include <HTTPClient.h>
+#include <WiFiClientSecure.h>
 #include <SD.h>
 #include <SPIFFS.h>
 #include "driver/WakeWord.h"
 #include "Scheduler.h"
-#include "StackchanExConfig.h" 
+#include "MySchedule.h"
+#include "StackchanExConfig.h"
 #include "SDUtil.h"
 #include "MCPClient.h"
 #include "llm/LLMBase.h"
+#include "rootCA/OpenWeatherMapRootCA.h"
 using namespace m5avatar;
 
 
@@ -26,6 +29,9 @@ static String avatarText;
 
 // Notepad content for save_note/read_note/delete_note
 String note = "";
+
+// OpenWeatherMap API key (loaded from SC_SecConfig.yaml)
+String g_weather_api_key = "";
 
 // タイマー機能関連
 TimerHandle_t xAlarmTimer;
@@ -210,6 +216,64 @@ const String json_Functions =
       "\"type\":\"object\","
       "\"properties\": {}"
     "}"
+  "},"
+  "{"
+    "\"name\": \"get_weather\","
+    "\"description\": \"指定した都市の現在の天気情報を取得する。\","
+    "\"parameters\": {"
+      "\"type\":\"object\","
+      "\"properties\": {"
+        "\"city\":{"
+          "\"type\": \"string\","
+          "\"description\": \"都市名（英語）。例: Tokyo, Osaka, New York\""
+        "}"
+      "},"
+      "\"required\": [\"city\"]"
+    "}"
+  "},"
+  "{"
+    "\"name\": \"schedule_add\","
+    "\"description\": \"定期スケジュールを登録する。cron式（分 時 日 月 曜日）で指定。例: 毎朝9時='0 9 * * *', 毎時='0 * * * *', 平日8時='0 8 * * 1,2,3,4,5'\","
+    "\"parameters\": {"
+      "\"type\":\"object\","
+      "\"properties\": {"
+        "\"name\":{"
+          "\"type\": \"string\","
+          "\"description\": \"スケジュール名（英数字、アンダースコア）\""
+        "},"
+        "\"cron\":{"
+          "\"type\": \"string\","
+          "\"description\": \"cron式（5フィールド: 分 時 日 月 曜日）。*は全て、カンマで複数指定可。曜日: 0=日,1=月,...,6=土\""
+        "},"
+        "\"action\":{"
+          "\"type\": \"string\","
+          "\"description\": \"実行時にAIに送る指示テキスト\""
+        "}"
+      "},"
+      "\"required\": [\"name\",\"cron\",\"action\"]"
+    "}"
+  "},"
+  "{"
+    "\"name\": \"schedule_list\","
+    "\"description\": \"登録されている定期スケジュールの一覧を取得する。\","
+    "\"parameters\": {"
+      "\"type\":\"object\","
+      "\"properties\": {}"
+    "}"
+  "},"
+  "{"
+    "\"name\": \"schedule_delete\","
+    "\"description\": \"指定した名前の定期スケジュールを削除する。\","
+    "\"parameters\": {"
+      "\"type\":\"object\","
+      "\"properties\": {"
+        "\"name\":{"
+          "\"type\": \"string\","
+          "\"description\": \"削除するスケジュール名\""
+        "}"
+      "},"
+      "\"required\": [\"name\"]"
+    "}"
   "}"
 #endif //if defined(USE_EXTENSION_FUNCTIONS)
 "]";
@@ -338,6 +402,23 @@ String FunctionCall::exec_calledFunc(const char* name, const char* args){
     else if(strcmp(name, "delete_note") == 0){
       response = delete_note();
     }
+    else if(strcmp(name, "get_weather") == 0){
+      const char* city = argsDoc["city"];
+      response = fn_get_weather(city);
+    }
+    else if(strcmp(name, "schedule_add") == 0){
+      const char* sname = argsDoc["name"];
+      const char* cron = argsDoc["cron"];
+      const char* saction = argsDoc["action"];
+      response = fn_schedule_add(sname, cron, saction);
+    }
+    else if(strcmp(name, "schedule_list") == 0){
+      response = fn_schedule_list();
+    }
+    else if(strcmp(name, "schedule_delete") == 0){
+      const char* sname = argsDoc["name"];
+      response = fn_schedule_delete(sname);
+    }
 #endif  //if defined(USE_EXTENSION_FUNCTIONS)
 
   }
@@ -350,11 +431,26 @@ END:
 String FunctionCall::fn_update_memory(LLMBase* llm, const char* memory){
   String response = "";
   if(llm->enableMemory()){
+    // Save to SPIFFS (existing behavior)
     if(llm->save_userInfo(memory)){
       response = "Memory update successful.";
     }else{
       response = "Memory update failure.";
     }
+
+    // Also append to SD card MEMORY.md with timestamp
+    struct tm timeInfo;
+    String entry;
+    if (getLocalTime(&timeInfo)) {
+      char dateBuf[20];
+      snprintf(dateBuf, sizeof(dateBuf), "%04d-%02d-%02d %02d:%02d",
+               timeInfo.tm_year + 1900, timeInfo.tm_mon + 1, timeInfo.tm_mday,
+               timeInfo.tm_hour, timeInfo.tm_min);
+      entry = String("- [") + dateBuf + "] " + String(memory);
+    } else {
+      entry = String("- ") + String(memory);
+    }
+    llm->appendMemory(entry);
   }
   else{
     response = "Memory is disabled.";
@@ -501,12 +597,13 @@ String FunctionCall::reminder(int hour, int min, const char* text){
 
   add_schedule(new ScheduleReminder(hour, min, String(text)));
   
-  //response = String("Reminder setting successful");
-  response = String(String("リマインドの設定成功。")
-                    + String(hour) + ":" + String(min) + " "
-                    + String(text));
-  
-  avatarText = String(hour) + ":" + String(min) + String("に設定しました");
+  char reminderBuf[128];
+  snprintf(reminderBuf, sizeof(reminderBuf), "リマインドの設定成功。%d:%02d %s", hour, min, text);
+  response = String(reminderBuf);
+
+  char avatarBuf[64];
+  snprintf(avatarBuf, sizeof(avatarBuf), "%d:%02dに設定しました", hour, min);
+  avatarText = String(avatarBuf);
   avatar.setSpeechText(avatarText.c_str());
   delay(2000);
   return response;
@@ -698,6 +795,76 @@ String FunctionCall::get_bus_time(int nNext){
 }
 
 
+String FunctionCall::fn_get_weather(const char* city){
+  String response = "";
+
+  if(g_weather_api_key == "" || g_weather_api_key == "null"){
+    Serial.println("[Weather] API key not configured");
+    return "天気APIキーが設定されていません。";
+  }
+
+  if(WiFi.status() != WL_CONNECTED){
+    Serial.println("[Weather] WiFi not connected");
+    return "WiFiに接続されていません。";
+  }
+
+  String url = "https://api.openweathermap.org/data/2.5/weather?q="
+             + String(city)
+             + "&units=metric&lang=ja&appid="
+             + g_weather_api_key;
+
+  Serial.printf("[Weather] Requesting weather for: %s\n", city);
+
+  WiFiClientSecure client;
+  client.setCACert(root_ca_openweathermap);
+  client.setTimeout(10000);  // 10 seconds (milliseconds)
+
+  HTTPClient http;
+  if(!http.begin(client, url)){
+    Serial.println("[Weather] HTTP begin failed");
+    return "天気情報の取得に失敗しました。";
+  }
+
+  int httpCode = http.GET();
+  Serial.printf("[Weather] HTTP response code: %d\n", httpCode);
+
+  if(httpCode != HTTP_CODE_OK){
+    http.end();
+    Serial.printf("[Weather] HTTP error: %d\n", httpCode);
+    return "天気情報の取得に失敗しました(HTTP " + String(httpCode) + ")。";
+  }
+
+  String payload = http.getString();
+  http.end();
+
+  // Parse JSON response (~1-2KB, heap is fine)
+  DynamicJsonDocument doc(2048);
+  DeserializationError error = deserializeJson(doc, payload);
+  if(error){
+    Serial.printf("[Weather] JSON parse error: %s\n", error.f_str());
+    return "天気データの解析に失敗しました。";
+  }
+
+  // Extract weather info
+  const char* description = doc["weather"][0]["description"];
+  float temp = doc["main"]["temp"];
+  int humidity = doc["main"]["humidity"];
+  float wind_speed = doc["wind"]["speed"];
+  const char* city_name = doc["name"];
+
+  // Build concise response
+  char buf[128];
+  snprintf(buf, sizeof(buf), "%s: %s、%.1f℃、湿度%d%%、風速%.1fm/s",
+           city_name ? city_name : city,
+           description ? description : "不明",
+           temp, humidity, wind_speed);
+
+  response = String(buf);
+  Serial.printf("[Weather] Result: %s\n", response.c_str());
+  return response;
+}
+
+
 // TODO: send_mail requires EMailSender library and mail config — excluded for now
 // See GitHub Issue #13 (Gmail連携) for future implementation
 #if 0
@@ -729,6 +896,94 @@ String FunctionCall::send_mail(String msg) {
   return response;
 }
 #endif
+
+String FunctionCall::fn_schedule_add(const char* name, const char* cron, const char* action){
+  String response = "";
+
+  if (!name || !cron || !action) {
+    response = "スケジュール登録に失敗しました（パラメータ不足）。";
+    Serial.printf("[CRON] schedule_add: missing params\n");
+    return response;
+  }
+
+  // Check if name already exists
+  if (find_cron_schedule(name) != nullptr) {
+    response = String("スケジュール '") + name + "' は既に存在します。";
+    Serial.printf("[CRON] schedule_add: '%s' already exists\n", name);
+    return response;
+  }
+
+  // Create and add schedule
+  add_schedule(new ScheduleCron(name, cron, action, true));
+
+  // Persist to SD
+  saveCronSchedules();
+
+  response = String("スケジュール '") + name + "' を登録しました（" + cron + "）。";
+  Serial.printf("[CRON] schedule_add: '%s' cron='%s' action='%s'\n", name, cron, action);
+  return response;
+}
+
+
+String FunctionCall::fn_schedule_list(){
+  static const int MAX_LIST = 10;
+  static const int BUF_SIZE = 1024;
+  char buf[BUF_SIZE];
+  int offset = 0;
+  int count = 0;
+
+  for (int i = 0; i < MAX_SCHED_NUM && count < MAX_LIST; i++) {
+    ScheduleBase* sched = get_schedule(i);
+    if (sched != nullptr && sched->get_sched_type() == SCHED_CRON) {
+      ScheduleCron* cron = (ScheduleCron*)sched;
+      int written = snprintf(buf + offset, BUF_SIZE - offset, "%s%s: %s -> %s%s",
+                             (count > 0) ? "\n" : "",
+                             cron->getName().c_str(),
+                             cron->getCronExpr().c_str(),
+                             cron->getAction().c_str(),
+                             cron->isEnabled() ? "" : " [無効]");
+      if (written > 0 && offset + written < BUF_SIZE) {
+        offset += written;
+      }
+      count++;
+    }
+  }
+
+  String response;
+  if (count == 0) {
+    response = "登録されているスケジュールはありません。";
+  } else {
+    char header[32];
+    snprintf(header, sizeof(header), "%d件のスケジュール:\n", count);
+    response = String(header) + String(buf);
+  }
+
+  Serial.printf("[CRON] schedule_list: %d entries\n", count);
+  return response;
+}
+
+
+String FunctionCall::fn_schedule_delete(const char* name){
+  String response = "";
+
+  if (!name) {
+    response = "スケジュール名を指定してください。";
+    return response;
+  }
+
+  if (remove_schedule_by_name(name)) {
+    // Persist to SD
+    saveCronSchedules();
+    response = String("スケジュール '") + name + "' を削除しました。";
+    Serial.printf("[CRON] schedule_delete: '%s' removed\n", name);
+  } else {
+    response = String("スケジュール '") + name + "' が見つかりません。";
+    Serial.printf("[CRON] schedule_delete: '%s' not found\n", name);
+  }
+
+  return response;
+}
+
 
 // TODO: read_mail requires mail receiver setup — excluded for now
 // See GitHub Issue #13 (Gmail連携) for future implementation

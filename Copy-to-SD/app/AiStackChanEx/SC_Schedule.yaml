@@ -1,0 +1,23 @@
+# Cron Schedule Configuration
+# Format: standard 5-field cron (min hour dom month dow)
+#   * = any, comma-separated values (e.g., 1,2,3)
+#   dow: 0=Sun, 1=Mon, ..., 6=Sat
+#
+# Examples:
+#   "0 9 * * *"       -> Every day at 9:00
+#   "0 * * * *"       -> Every hour at :00
+#   "30 8 * * 1,2,3,4,5" -> Weekdays at 8:30
+#   "0 9,18 * * *"    -> At 9:00 and 18:00
+
+schedules: []
+
+# Uncomment below for example schedules:
+#schedules:
+#  - name: "morning_briefing"
+#    cron: "0 9 * * *"
+#    action: "おはよう！今日の天気と予定を教えて"
+#    enabled: true
+#  - name: "hourly_check"
+#    cron: "0 * * * *"
+#    action: "現在時刻を教えて"
+#    enabled: true

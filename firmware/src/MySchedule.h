@@ -2,5 +2,7 @@
 #define _MY_SCHEDULER_H
 
 extern void init_schedule(void);
+extern bool loadCronSchedules();
+extern bool saveCronSchedules();
 
 #endif
