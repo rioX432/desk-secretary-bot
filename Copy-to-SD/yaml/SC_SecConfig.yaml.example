@@ -8,3 +8,4 @@ apikey:
   stt: "********"       # ApiKey of SpeechToText Service
   aiservice: "********" # ApiKey of AIService
   tts: "********"       # ApiKey of TextToSpeech Service
+  openweather: "********" # ApiKey of OpenWeatherMap (https://openweathermap.org/api)

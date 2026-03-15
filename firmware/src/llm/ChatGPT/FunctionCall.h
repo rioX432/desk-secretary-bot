@@ -25,6 +25,8 @@ extern bool wakeword_enable_required;
 extern bool alarmTimerCallbacked;
 extern bool alarmTimerCanceled;
 
+extern String g_weather_api_key;
+
 
 class FunctionCall{
 private:
@@ -65,6 +67,7 @@ public:
     String read_note();
     String delete_note();
     String get_bus_time(int nNext);
+    String fn_get_weather(const char* city);
     // send_mail / read_mail are excluded until EMailSender library is configured
     #endif  //USE_EXTENSION_FUNCTIONS
 };

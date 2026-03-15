@@ -11,11 +11,14 @@
 #include "driver/ModuleLLM.h"
 #include "llm/LLMBase.h"
 #include "llm/ChatGPT/ChatGPT.h"
+#include "llm/ChatGPT/FunctionCall.h"
 #include "llm/ChatGPT/RealtimeChatGPT.h"
 #include "llm/Gemini/GeminiLive.h"
 #include "llm/ModuleLLM/ChatModuleLLM.h"
 #include "llm/ModuleLLMFncl/ChatModuleLLMFncl.h"
 #include "Avatar.h"
+#include <SD.h>
+#include <ArduinoYaml.h>
 
 using namespace m5avatar;
 
@@ -147,6 +150,26 @@ void Robot::initLLM(StackchanExConfig& config){
   default:
     Serial.printf("Error: undefined LLM type %d\n", llm_type);
     llm = nullptr;
+  }
+
+  // Load OpenWeatherMap API key from SC_SecConfig.yaml
+  if (SD.begin(GPIO_NUM_4, SPI, 25000000)) {
+    File file = SD.open("/yaml/SC_SecConfig.yaml");
+    if (file) {
+      DynamicJsonDocument doc(2048);
+      auto err = deserializeYml(doc, file);
+      file.close();
+      if (!err) {
+        String owKey = doc["apikey"]["openweather"].as<String>();
+        if (owKey != "null" && owKey != "" && owKey != "********") {
+          g_weather_api_key = owKey;
+          Serial.println("[Weather] API key loaded");
+        } else {
+          Serial.println("[Weather] API key not configured in SC_SecConfig.yaml");
+        }
+      }
+    }
+    SD.end();
   }
 }
 

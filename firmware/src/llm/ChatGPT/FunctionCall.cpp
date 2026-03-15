@@ -4,14 +4,16 @@
 #include <AudioGeneratorMP3.h>
 #include "driver/AudioOutputM5Speaker.h"
 #include <HTTPClient.h>
+#include <WiFiClientSecure.h>
 #include <SD.h>
 #include <SPIFFS.h>
 #include "driver/WakeWord.h"
 #include "Scheduler.h"
-#include "StackchanExConfig.h" 
+#include "StackchanExConfig.h"
 #include "SDUtil.h"
 #include "MCPClient.h"
 #include "llm/LLMBase.h"
+#include "rootCA/OpenWeatherMapRootCA.h"
 using namespace m5avatar;
 
 
@@ -26,6 +28,9 @@ static String avatarText;
 
 // Notepad content for save_note/read_note/delete_note
 String note = "";
+
+// OpenWeatherMap API key (loaded from SC_SecConfig.yaml)
+String g_weather_api_key = "";
 
 // タイマー機能関連
 TimerHandle_t xAlarmTimer;
@@ -210,6 +215,20 @@ const String json_Functions =
       "\"type\":\"object\","
       "\"properties\": {}"
     "}"
+  "},"
+  "{"
+    "\"name\": \"get_weather\","
+    "\"description\": \"指定した都市の現在の天気情報を取得する。\","
+    "\"parameters\": {"
+      "\"type\":\"object\","
+      "\"properties\": {"
+        "\"city\":{"
+          "\"type\": \"string\","
+          "\"description\": \"都市名（英語）。例: Tokyo, Osaka, New York\""
+        "}"
+      "},"
+      "\"required\": [\"city\"]"
+    "}"
   "}"
 #endif //if defined(USE_EXTENSION_FUNCTIONS)
 "]";
@@ -337,6 +356,10 @@ String FunctionCall::exec_calledFunc(const char* name, const char* args){
     }
     else if(strcmp(name, "delete_note") == 0){
       response = delete_note();
+    }
+    else if(strcmp(name, "get_weather") == 0){
+      const char* city = argsDoc["city"];
+      response = fn_get_weather(city);
     }
 #endif  //if defined(USE_EXTENSION_FUNCTIONS)
 
@@ -694,6 +717,76 @@ String FunctionCall::get_bus_time(int nNext){
     response = "現在時刻の取得に失敗しました。";
   }
 
+  return response;
+}
+
+
+String FunctionCall::fn_get_weather(const char* city){
+  String response = "";
+
+  if(g_weather_api_key == "" || g_weather_api_key == "null"){
+    Serial.println("[Weather] API key not configured");
+    return "天気APIキーが設定されていません。";
+  }
+
+  if(WiFi.status() != WL_CONNECTED){
+    Serial.println("[Weather] WiFi not connected");
+    return "WiFiに接続されていません。";
+  }
+
+  String url = "https://api.openweathermap.org/data/2.5/weather?q="
+             + String(city)
+             + "&units=metric&lang=ja&appid="
+             + g_weather_api_key;
+
+  Serial.printf("[Weather] Requesting weather for: %s\n", city);
+
+  WiFiClientSecure client;
+  client.setCACert(root_ca_openweathermap);
+  client.setTimeout(10);  // 10 seconds
+
+  HTTPClient http;
+  if(!http.begin(client, url)){
+    Serial.println("[Weather] HTTP begin failed");
+    return "天気情報の取得に失敗しました。";
+  }
+
+  int httpCode = http.GET();
+  Serial.printf("[Weather] HTTP response code: %d\n", httpCode);
+
+  if(httpCode != HTTP_CODE_OK){
+    http.end();
+    Serial.printf("[Weather] HTTP error: %d\n", httpCode);
+    return "天気情報の取得に失敗しました(HTTP " + String(httpCode) + ")。";
+  }
+
+  String payload = http.getString();
+  http.end();
+
+  // Parse JSON response (~1-2KB, heap is fine)
+  DynamicJsonDocument doc(2048);
+  DeserializationError error = deserializeJson(doc, payload);
+  if(error){
+    Serial.printf("[Weather] JSON parse error: %s\n", error.f_str());
+    return "天気データの解析に失敗しました。";
+  }
+
+  // Extract weather info
+  const char* description = doc["weather"][0]["description"];
+  float temp = doc["main"]["temp"];
+  int humidity = doc["main"]["humidity"];
+  float wind_speed = doc["wind"]["speed"];
+  const char* city_name = doc["name"];
+
+  // Build concise response
+  char buf[128];
+  snprintf(buf, sizeof(buf), "%s: %s、%.1f℃、湿度%d%%、風速%.1fm/s",
+           city_name ? city_name : city,
+           description ? description : "不明",
+           temp, humidity, wind_speed);
+
+  response = String(buf);
+  Serial.printf("[Weather] Result: %s\n", response.c_str());
   return response;
 }
 
