@@ -18,6 +18,13 @@ extern const String systemRole_noMemory;
 #define SYSTEM_PROMPT_INDEX_SYSTEM_ROLE   (1)
 #define SYSTEM_PROMPT_INDEX_USER_INFO     (2)
 
+// SD card memory file paths
+#define MEMORY_DIR        "/memory"
+#define SOUL_FILE_PATH    "/memory/SOUL.md"
+#define USER_FILE_PATH    "/memory/USER.md"
+#define MEMORY_FILE_PATH  "/memory/MEMORY.md"
+#define MEMORY_FILE_MAX_SIZE  (4096)
+
 
 struct llm_param_t
 {
@@ -41,6 +48,11 @@ protected:
   bool save_system_prompt_to_spiffs();
   bool load_system_prompt_from_spiffs();
 
+  // Memory files loaded from SD card
+  String _soulContent;
+  String _userContent;
+  String _memoryContent;
+
 public:
   bool isOfflineService;
 
@@ -53,6 +65,13 @@ public:
   String get_userRole();
   String get_userInfo();
   bool clear_userInfo();
+
+  // Memory file operations
+  void loadMemoryFiles();
+  const String& getSoulContent() { return _soulContent; }
+  const String& getUserContent() { return _userContent; }
+  const String& getMemoryContent() { return _memoryContent; }
+  bool appendMemory(const String& entry);
 
   String get_InitBuffer() { return InitBuffer; };
   SpiRamJsonDocument& get_chat_doc() { return chat_doc; };

@@ -49,6 +49,9 @@ ChatGPT::ChatGPT(llm_param_t param, int _promptMaxSize)
     M5.Lcd.println("Memory is enabled");
   }
 
+  // Load SOUL.md, USER.md, MEMORY.md from SD card
+  loadMemoryFiles();
+
   if(promptMaxSize != 0){
     load_role();
   }
@@ -106,6 +109,24 @@ void ChatGPT::load_role(){
     // デフォルトのシステムプロンプト設定に失敗した場合（通常起こり得ない）。
     role = defaultRole;
     userInfo = "User Info: ";
+  }
+
+  // Inject SOUL.md content into the role (prepend to user role)
+  if (_soulContent.length() > 0) {
+    role = _soulContent + "\n\n" + role;
+    Serial.println("[MEM] SOUL.md injected into role");
+  }
+
+  // Inject USER.md and MEMORY.md into user info
+  if (enableMemory()) {
+    if (_userContent.length() > 0) {
+      userInfo += "\n\n[User Profile]\n" + _userContent;
+      Serial.println("[MEM] USER.md injected into user info");
+    }
+    if (_memoryContent.length() > 0) {
+      userInfo += "\n\n[Long-term Memory]\n" + _memoryContent;
+      Serial.println("[MEM] MEMORY.md injected into user info");
+    }
   }
 
   init_chat_doc(json_ChatString.c_str());   // chat_docを初期化

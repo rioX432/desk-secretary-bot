@@ -373,11 +373,26 @@ END:
 String FunctionCall::fn_update_memory(LLMBase* llm, const char* memory){
   String response = "";
   if(llm->enableMemory()){
+    // Save to SPIFFS (existing behavior)
     if(llm->save_userInfo(memory)){
       response = "Memory update successful.";
     }else{
       response = "Memory update failure.";
     }
+
+    // Also append to SD card MEMORY.md with timestamp
+    struct tm timeInfo;
+    String entry;
+    if (getLocalTime(&timeInfo)) {
+      char dateBuf[20];
+      snprintf(dateBuf, sizeof(dateBuf), "%04d-%02d-%02d %02d:%02d",
+               timeInfo.tm_year + 1900, timeInfo.tm_mon + 1, timeInfo.tm_mday,
+               timeInfo.tm_hour, timeInfo.tm_min);
+      entry = String("- [") + dateBuf + "] " + String(memory);
+    } else {
+      entry = String("- ") + String(memory);
+    }
+    llm->appendMemory(entry);
   }
   else{
     response = "Memory is disabled.";

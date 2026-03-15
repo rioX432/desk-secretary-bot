@@ -122,3 +122,91 @@ bool copySDFileToSPIFFS(const char *path, bool forced) {
   return true;
 }
 
+
+// Read a text file from SD card into a String.
+// Max read size is capped at maxSize to prevent OOM.
+// Returns true on success, false if file not found or read error.
+bool readSDTextFile(const char* path, String& content, size_t maxSize) {
+  content = "";
+
+  if (!SD.exists(path)) {
+    Serial.printf("[MEM] SD file not found: %s\n", path);
+    return false;
+  }
+
+  File f = SD.open(path, FILE_READ);
+  if (!f) {
+    Serial.printf("[MEM] Failed to open: %s\n", path);
+    return false;
+  }
+
+  size_t sz = f.size();
+  if (sz == 0) {
+    f.close();
+    Serial.printf("[MEM] File is empty: %s\n", path);
+    return true;  // success but empty
+  }
+
+  if (sz > maxSize) {
+    Serial.printf("[MEM] File too large (%d > %d), truncating: %s\n", sz, maxSize, path);
+    sz = maxSize;
+  }
+
+  // Use PSRAM for read buffer
+  char* buf = (char*)ps_malloc(sz + 1);
+  if (!buf) {
+    // Fallback to heap
+    buf = (char*)malloc(sz + 1);
+    if (!buf) {
+      Serial.printf("[MEM] Failed to allocate buffer for: %s\n", path);
+      f.close();
+      return false;
+    }
+  }
+
+  size_t bytesRead = f.read((uint8_t*)buf, sz);
+  f.close();
+  buf[bytesRead] = '\0';
+  content = String(buf);
+  free(buf);
+
+  Serial.printf("[MEM] Read %d bytes from: %s\n", bytesRead, path);
+  return true;
+}
+
+
+// Write (overwrite) a text file on SD card.
+bool writeSDTextFile(const char* path, const String& content) {
+  File f = SD.open(path, FILE_WRITE);
+  if (!f) {
+    Serial.printf("[MEM] Failed to open for write: %s\n", path);
+    return false;
+  }
+
+  size_t written = f.print(content);
+  f.close();
+
+  Serial.printf("[MEM] Wrote %d bytes to: %s\n", written, path);
+  return true;
+}
+
+
+// Append text to a file on SD card. Creates the file if it doesn't exist.
+bool appendSDTextFile(const char* path, const String& content) {
+  File f = SD.open(path, FILE_APPEND);
+  if (!f) {
+    // FILE_APPEND may fail if file doesn't exist on some platforms; try write
+    f = SD.open(path, FILE_WRITE);
+    if (!f) {
+      Serial.printf("[MEM] Failed to open for append: %s\n", path);
+      return false;
+    }
+  }
+
+  size_t written = f.print(content);
+  f.close();
+
+  Serial.printf("[MEM] Appended %d bytes to: %s\n", written, path);
+  return true;
+}
+

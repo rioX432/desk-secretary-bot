@@ -6,6 +6,7 @@
 #include "ChatHistory.h"
 #include "Robot.h"
 #include "LLMBase.h"
+#include "SDUtil.h"
 
 
 // 保存する質問と回答の最大数
@@ -208,4 +209,52 @@ String LLMBase::get_userInfo() {
 
 bool LLMBase::clear_userInfo() {
   return save_userInfo("");
+}
+
+
+void LLMBase::loadMemoryFiles() {
+  Serial.println("[MEM] Loading memory files from SD card...");
+
+  if (!readSDTextFile(SOUL_FILE_PATH, _soulContent, MEMORY_FILE_MAX_SIZE)) {
+    Serial.println("[MEM] SOUL.md not found, using default role");
+  } else {
+    Serial.printf("[MEM] SOUL.md loaded (%d bytes)\n", _soulContent.length());
+  }
+
+  if (!readSDTextFile(USER_FILE_PATH, _userContent, MEMORY_FILE_MAX_SIZE)) {
+    Serial.println("[MEM] USER.md not found");
+  } else {
+    Serial.printf("[MEM] USER.md loaded (%d bytes)\n", _userContent.length());
+  }
+
+  if (!readSDTextFile(MEMORY_FILE_PATH, _memoryContent, MEMORY_FILE_MAX_SIZE)) {
+    Serial.println("[MEM] MEMORY.md not found");
+  } else {
+    Serial.printf("[MEM] MEMORY.md loaded (%d bytes)\n", _memoryContent.length());
+  }
+}
+
+
+bool LLMBase::appendMemory(const String& entry) {
+  // Append to in-memory content
+  _memoryContent += entry + "\n";
+
+  // Also persist to SD card
+  bool ok = appendSDTextFile(MEMORY_FILE_PATH, entry + "\n");
+  if (ok) {
+    Serial.printf("[MEM] Appended to MEMORY.md: %s\n", entry.c_str());
+  } else {
+    Serial.println("[MEM] Failed to append to MEMORY.md on SD");
+  }
+
+  // Truncate in-memory content if it grows too large
+  if (_memoryContent.length() > MEMORY_FILE_MAX_SIZE) {
+    Serial.println("[MEM] Memory content exceeds max size, truncating oldest entries");
+    int cutPos = _memoryContent.indexOf('\n', _memoryContent.length() - MEMORY_FILE_MAX_SIZE);
+    if (cutPos > 0) {
+      _memoryContent = _memoryContent.substring(cutPos + 1);
+    }
+  }
+
+  return ok;
 }
