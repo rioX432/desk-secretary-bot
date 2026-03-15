@@ -9,6 +9,7 @@
 #include <SPIFFS.h>
 #include "driver/WakeWord.h"
 #include "Scheduler.h"
+#include "MySchedule.h"
 #include "StackchanExConfig.h"
 #include "SDUtil.h"
 #include "MCPClient.h"
@@ -229,6 +230,50 @@ const String json_Functions =
       "},"
       "\"required\": [\"city\"]"
     "}"
+  "},"
+  "{"
+    "\"name\": \"schedule_add\","
+    "\"description\": \"定期スケジュールを登録する。cron式（分 時 日 月 曜日）で指定。例: 毎朝9時='0 9 * * *', 毎時='0 * * * *', 平日8時='0 8 * * 1,2,3,4,5'\","
+    "\"parameters\": {"
+      "\"type\":\"object\","
+      "\"properties\": {"
+        "\"name\":{"
+          "\"type\": \"string\","
+          "\"description\": \"スケジュール名（英数字、アンダースコア）\""
+        "},"
+        "\"cron\":{"
+          "\"type\": \"string\","
+          "\"description\": \"cron式（5フィールド: 分 時 日 月 曜日）。*は全て、カンマで複数指定可。曜日: 0=日,1=月,...,6=土\""
+        "},"
+        "\"action\":{"
+          "\"type\": \"string\","
+          "\"description\": \"実行時にAIに送る指示テキスト\""
+        "}"
+      "},"
+      "\"required\": [\"name\",\"cron\",\"action\"]"
+    "}"
+  "},"
+  "{"
+    "\"name\": \"schedule_list\","
+    "\"description\": \"登録されている定期スケジュールの一覧を取得する。\","
+    "\"parameters\": {"
+      "\"type\":\"object\","
+      "\"properties\": {}"
+    "}"
+  "},"
+  "{"
+    "\"name\": \"schedule_delete\","
+    "\"description\": \"指定した名前の定期スケジュールを削除する。\","
+    "\"parameters\": {"
+      "\"type\":\"object\","
+      "\"properties\": {"
+        "\"name\":{"
+          "\"type\": \"string\","
+          "\"description\": \"削除するスケジュール名\""
+        "}"
+      "},"
+      "\"required\": [\"name\"]"
+    "}"
   "}"
 #endif //if defined(USE_EXTENSION_FUNCTIONS)
 "]";
@@ -360,6 +405,19 @@ String FunctionCall::exec_calledFunc(const char* name, const char* args){
     else if(strcmp(name, "get_weather") == 0){
       const char* city = argsDoc["city"];
       response = fn_get_weather(city);
+    }
+    else if(strcmp(name, "schedule_add") == 0){
+      const char* sname = argsDoc["name"];
+      const char* cron = argsDoc["cron"];
+      const char* saction = argsDoc["action"];
+      response = fn_schedule_add(sname, cron, saction);
+    }
+    else if(strcmp(name, "schedule_list") == 0){
+      response = fn_schedule_list();
+    }
+    else if(strcmp(name, "schedule_delete") == 0){
+      const char* sname = argsDoc["name"];
+      response = fn_schedule_delete(sname);
     }
 #endif  //if defined(USE_EXTENSION_FUNCTIONS)
 
@@ -837,6 +895,83 @@ String FunctionCall::send_mail(String msg) {
   return response;
 }
 #endif
+
+String FunctionCall::fn_schedule_add(const char* name, const char* cron, const char* action){
+  String response = "";
+
+  if (!name || !cron || !action) {
+    response = "スケジュール登録に失敗しました（パラメータ不足）。";
+    Serial.printf("[CRON] schedule_add: missing params\n");
+    return response;
+  }
+
+  // Check if name already exists
+  if (find_cron_schedule(name) != nullptr) {
+    response = String("スケジュール '") + name + "' は既に存在します。";
+    Serial.printf("[CRON] schedule_add: '%s' already exists\n", name);
+    return response;
+  }
+
+  // Create and add schedule
+  add_schedule(new ScheduleCron(name, cron, action, true));
+
+  // Persist to SD
+  saveCronSchedules();
+
+  response = String("スケジュール '") + name + "' を登録しました（" + cron + "）。";
+  Serial.printf("[CRON] schedule_add: '%s' cron='%s' action='%s'\n", name, cron, action);
+  return response;
+}
+
+
+String FunctionCall::fn_schedule_list(){
+  String response = "";
+  int count = 0;
+
+  for (int i = 0; i < MAX_SCHED_NUM; i++) {
+    ScheduleBase* sched = get_schedule(i);
+    if (sched != nullptr && sched->get_sched_type() == SCHED_CRON) {
+      ScheduleCron* cron = (ScheduleCron*)sched;
+      if (count > 0) response += "\n";
+      response += cron->getName() + ": " + cron->getCronExpr()
+                + " -> " + cron->getAction()
+                + (cron->isEnabled() ? "" : " [無効]");
+      count++;
+    }
+  }
+
+  if (count == 0) {
+    response = "登録されているスケジュールはありません。";
+  } else {
+    response = String(count) + "件のスケジュール:\n" + response;
+  }
+
+  Serial.printf("[CRON] schedule_list: %d entries\n", count);
+  return response;
+}
+
+
+String FunctionCall::fn_schedule_delete(const char* name){
+  String response = "";
+
+  if (!name) {
+    response = "スケジュール名を指定してください。";
+    return response;
+  }
+
+  if (remove_schedule_by_name(name)) {
+    // Persist to SD
+    saveCronSchedules();
+    response = String("スケジュール '") + name + "' を削除しました。";
+    Serial.printf("[CRON] schedule_delete: '%s' removed\n", name);
+  } else {
+    response = String("スケジュール '") + name + "' が見つかりません。";
+    Serial.printf("[CRON] schedule_delete: '%s' not found\n", name);
+  }
+
+  return response;
+}
+
 
 // TODO: read_mail requires mail receiver setup — excluded for now
 // See GitHub Issue #13 (Gmail連携) for future implementation

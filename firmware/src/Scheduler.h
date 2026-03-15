@@ -4,13 +4,16 @@
 #include <Arduino.h>
 
 #define MAX_SCHED_NUM   (50)
+#define CRON_MAX_NAME_LEN   (32)
+#define CRON_MAX_ACTION_LEN (200)
 
 typedef enum e_sched_type
 {
     SCHED_EVERY_DAY,
     SCHED_EVERY_HOUR,
     SCHED_REMINDER,
-    SCHED_INTERVAL_MINUTE
+    SCHED_INTERVAL_MINUTE,
+    SCHED_CRON
 } SCHED_TYPE;
 
 class ScheduleBase{
@@ -75,9 +78,43 @@ public:
 };
 
 
+class ScheduleCron: public ScheduleBase{
+private:
+    String name;
+    String cron_expr;   // 5-field cron: min hour dom month dow
+    String action;
+    bool enabled;
+    int last_run_min;   // minute of last execution (-1 = never)
+
+    // Parsed cron fields (comma-separated lists stored as arrays)
+    static const int MAX_VALS = 12;
+    int min_vals[MAX_VALS];   int min_count;   bool min_any;
+    int hour_vals[MAX_VALS];  int hour_count;  bool hour_any;
+    int dom_vals[MAX_VALS];   int dom_count;   bool dom_any;
+    int mon_vals[MAX_VALS];   int mon_count;   bool mon_any;
+    int dow_vals[MAX_VALS];   int dow_count;   bool dow_any;
+
+    void parseCron();
+    bool parseField(const char* field, int* vals, int& count, bool& isAny);
+    bool matchField(int value, int* vals, int count, bool isAny);
+
+public:
+    ScheduleCron(const char* _name, const char* _cron, const char* _action, bool _enabled = true);
+    void run(struct tm now_time);
+    String getName() { return name; }
+    String getCronExpr() { return cron_expr; }
+    String getAction() { return action; }
+    bool isEnabled() { return enabled; }
+    void setEnabled(bool e) { enabled = e; }
+};
+
+
 extern void add_schedule(ScheduleBase* schedule);
 extern ScheduleBase* get_schedule(int idx);
 extern void run_schedule(void);
+extern bool remove_schedule_by_name(const char* name);
+extern ScheduleCron* find_cron_schedule(const char* name);
+extern int get_cron_schedule_count();
 
 
 

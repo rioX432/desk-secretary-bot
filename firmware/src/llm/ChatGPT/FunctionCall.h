@@ -68,6 +68,9 @@ public:
     String delete_note();
     String get_bus_time(int nNext);
     String fn_get_weather(const char* city);
+    String fn_schedule_add(const char* name, const char* cron, const char* action);
+    String fn_schedule_list();
+    String fn_schedule_delete(const char* name);
     // send_mail / read_mail are excluded until EMailSender library is configured
     #endif  //USE_EXTENSION_FUNCTIONS
 };
