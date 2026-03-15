@@ -2,6 +2,7 @@
 #include <SD.h>
 #include <ArduinoJson.h>
 #include <ArduinoYaml.h>
+#include "SpiRamJsonDocument.h"
 #include "Scheduler.h"
 #include "llm/ChatGPT/ChatGPT.h"
 #include "llm/ChatGPT/FunctionCall.h"
@@ -80,7 +81,7 @@ bool loadCronSchedules()
         return false;
     }
 
-    DynamicJsonDocument doc(2048);
+    SpiRamJsonDocument doc(4096);
     auto err = deserializeYml(doc, file);
     file.close();
 
@@ -124,7 +125,7 @@ bool loadCronSchedules()
 
 bool saveCronSchedules()
 {
-    DynamicJsonDocument doc(2048);
+    SpiRamJsonDocument doc(4096);
     JsonArray arr = doc.createNestedArray("schedules");
 
     for (int i = 0; i < MAX_SCHED_NUM; i++) {

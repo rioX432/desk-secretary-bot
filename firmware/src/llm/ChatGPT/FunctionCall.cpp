@@ -597,12 +597,13 @@ String FunctionCall::reminder(int hour, int min, const char* text){
 
   add_schedule(new ScheduleReminder(hour, min, String(text)));
   
-  //response = String("Reminder setting successful");
-  response = String(String("リマインドの設定成功。")
-                    + String(hour) + ":" + String(min) + " "
-                    + String(text));
-  
-  avatarText = String(hour) + ":" + String(min) + String("に設定しました");
+  char reminderBuf[128];
+  snprintf(reminderBuf, sizeof(reminderBuf), "リマインドの設定成功。%d:%02d %s", hour, min, text);
+  response = String(reminderBuf);
+
+  char avatarBuf[64];
+  snprintf(avatarBuf, sizeof(avatarBuf), "%d:%02dに設定しました", hour, min);
+  avatarText = String(avatarBuf);
   avatar.setSpeechText(avatarText.c_str());
   delay(2000);
   return response;
@@ -816,7 +817,7 @@ String FunctionCall::fn_get_weather(const char* city){
 
   WiFiClientSecure client;
   client.setCACert(root_ca_openweathermap);
-  client.setTimeout(10);  // 10 seconds
+  client.setTimeout(10000);  // 10 seconds (milliseconds)
 
   HTTPClient http;
   if(!http.begin(client, url)){
@@ -925,25 +926,36 @@ String FunctionCall::fn_schedule_add(const char* name, const char* cron, const c
 
 
 String FunctionCall::fn_schedule_list(){
-  String response = "";
+  static const int MAX_LIST = 10;
+  static const int BUF_SIZE = 1024;
+  char buf[BUF_SIZE];
+  int offset = 0;
   int count = 0;
 
-  for (int i = 0; i < MAX_SCHED_NUM; i++) {
+  for (int i = 0; i < MAX_SCHED_NUM && count < MAX_LIST; i++) {
     ScheduleBase* sched = get_schedule(i);
     if (sched != nullptr && sched->get_sched_type() == SCHED_CRON) {
       ScheduleCron* cron = (ScheduleCron*)sched;
-      if (count > 0) response += "\n";
-      response += cron->getName() + ": " + cron->getCronExpr()
-                + " -> " + cron->getAction()
-                + (cron->isEnabled() ? "" : " [無効]");
+      int written = snprintf(buf + offset, BUF_SIZE - offset, "%s%s: %s -> %s%s",
+                             (count > 0) ? "\n" : "",
+                             cron->getName().c_str(),
+                             cron->getCronExpr().c_str(),
+                             cron->getAction().c_str(),
+                             cron->isEnabled() ? "" : " [無効]");
+      if (written > 0 && offset + written < BUF_SIZE) {
+        offset += written;
+      }
       count++;
     }
   }
 
+  String response;
   if (count == 0) {
     response = "登録されているスケジュールはありません。";
   } else {
-    response = String(count) + "件のスケジュール:\n" + response;
+    char header[32];
+    snprintf(header, sizeof(header), "%d件のスケジュール:\n", count);
+    response = String(header) + String(buf);
   }
 
   Serial.printf("[CRON] schedule_list: %d entries\n", count);

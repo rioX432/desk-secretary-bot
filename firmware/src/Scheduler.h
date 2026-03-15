@@ -96,6 +96,7 @@ private:
 
     void parseCron();
     bool parseField(const char* field, int* vals, int& count, bool& isAny);
+    bool validateFieldRange(int* vals, int count, bool isAny, int minVal, int maxVal);
     bool matchField(int value, int* vals, int count, bool isAny);
 
 public:

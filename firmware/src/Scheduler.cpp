@@ -273,6 +273,18 @@ bool ScheduleCron::parseField(const char* field, int* vals, int& count, bool& is
     return count > 0;
 }
 
+bool ScheduleCron::validateFieldRange(int* vals, int count, bool isAny, int minVal, int maxVal)
+{
+    if (isAny) return true;
+    for (int i = 0; i < count; i++) {
+        if (vals[i] < minVal || vals[i] > maxVal) {
+            Serial.printf("[CRON] Value %d out of range [%d-%d]\n", vals[i], minVal, maxVal);
+            return false;
+        }
+    }
+    return true;
+}
+
 void ScheduleCron::parseCron()
 {
     // Parse 5-field cron: min hour dom month dow
@@ -299,6 +311,17 @@ void ScheduleCron::parseCron()
     parseField(fields[2], dom_vals, dom_count, dom_any);
     parseField(fields[3], mon_vals, mon_count, mon_any);
     parseField(fields[4], dow_vals, dow_count, dow_any);
+
+    // Validate parsed values
+    if (!validateFieldRange(min_vals, min_count, min_any, 0, 59) ||
+        !validateFieldRange(hour_vals, hour_count, hour_any, 0, 23) ||
+        !validateFieldRange(dom_vals, dom_count, dom_any, 1, 31) ||
+        !validateFieldRange(mon_vals, mon_count, mon_any, 1, 12) ||
+        !validateFieldRange(dow_vals, dow_count, dow_any, 0, 6)) {
+        Serial.printf("[CRON] Invalid cron field value in: %s\n", cron_expr.c_str());
+        enabled = false;
+        return;
+    }
 
     Serial.printf("[CRON] Parsed schedule '%s': %s -> %s\n",
                   name.c_str(), cron_expr.c_str(), action.c_str());
