@@ -1,7 +1,7 @@
 ---
 name: dev
-description: "End-to-end: investigate → implement → build → flash → PR"
-argument-hint: "[GitHub issue #, e.g. #7]"
+description: "E2E development: investigate → dig → decompose → implement → test → review → PR"
+argument-hint: "[issue number or ID, e.g. #42 or PGR-1234]"
 user-invocable: true
 disable-model-invocation: true
 allowed-tools:
@@ -13,213 +13,276 @@ allowed-tools:
   - Bash(git log:*)
   - Bash(git status)
   - Bash(git branch:*)
-  - Bash(cd firmware && ~/.platformio/penv/bin/pio *)
-  - Bash(~/.platformio/penv/bin/pio *)
-  - Bash(gh pr create --repo rioX432/desk-secretary-bot:*)
-  - Bash(gh issue view --repo rioX432/desk-secretary-bot:*)
-  - Bash(gh issue comment --repo rioX432/desk-secretary-bot:*)
+  - Bash(gh pr create:*)
+  - Bash(gh issue view:*)
   - Glob
   - Grep
   - Read
   - Edit
   - Write
-  - Task
+  - Agent
+  - Skill
   - TaskCreate
   - TaskUpdate
   - TaskList
+  - TaskGet
   - ToolSearch
   - AskUserQuestion
-  - mcp__codex__codex
-  - mcp__codex__codex-reply
 ---
 
-# /dev — End-to-End Development Workflow
+# /dev — E2E Development Workflow
 
-Execute the full development cycle for an issue: investigate → implement → build → (flash) → PR.
+Resolve Issue $ARGUMENTS from investigation to PR creation.
 
-**Target:** "$ARGUMENTS"
+**Target:** $ARGUMENTS
 
 ## Setup: Create Task Tracker
 
-Use `TaskCreate` to create a task for each phase:
+Use `TaskCreate` to create a task for each phase. This provides progress visibility and persistence across `/compact`.
+
 1. "Gather context from issue"
 2. "Investigate codebase"
-3. "Implement changes"
-4. "Build firmware"
-5. "Commit changes"
-6. "Create PR"
+3. "Resolve ambiguities (/dig)"
+4. "Decompose into subtasks (/decompose)"
+5. "Implement changes"
+6. "Run quality gate"
+7. "Review changes"
+8. "Commit & create PR"
 
 Use `TaskUpdate` to mark each task `in_progress` when starting and `completed` when done.
 
+## Workflow
+
+```
+Phase 1: Issue Understanding
+    ↓
+Phase 2: Investigation (← Explore subagent)
+    ↓
+Phase 3: Ambiguity Resolution (/dig)
+    ↓
+Phase 4: Task Decomposition (/decompose)
+    ↓
+── AskUserQuestion: confirm approach + task list ──
+    ↓
+Phase 5: Branch & Implement
+    ↓
+Phase 6: Quality Gate (build + test + lint from CLAUDE.md)
+    ↓
+Phase 7: Review (/review)
+    ↓
+── AskUserQuestion: commit + PR confirmation ──
+    ↓
+Phase 8: Commit & PR Creation
+```
+
 ---
 
-## Phase 1: Context Gathering
+## Phase 1: Issue Understanding
 
-### 1a. Issue Context
+Mark task 1 `in_progress`.
 
-**GitHub Issue** (starts with `#`):
-1. Run `gh issue view <number> --repo rioX432/desk-secretary-bot --json number,title,body,labels`
+Detect the issue source from "$ARGUMENTS":
+
+**GitHub Issue** (starts with `#` or is a number):
+1. `gh issue view <number> --json number,title,body,labels,assignees,comments`
 2. Extract: title, description, acceptance criteria, labels
 
+**Linear Issue** (matches `XXX-1234` pattern):
+1. Use `ToolSearch` with `+linear` to load the Linear MCP
+2. Call `mcp__linear__get_issue` with the issue ID
+
+**Figma links** in the issue description (`figma.com/design/...`):
+1. Use `ToolSearch` with `+figma-remote` to load Figma MCP
+2. Fetch design context and screenshot
+
 **Branch naming** (from labels or issue type):
-- `phase-N` label → branch prefix matching phase
-- Bug → branch prefix `fix/`
-- Feature → branch prefix `feature/`
-- Format: `{prefix}/{issue-number}-{kebab-case-short-description}`
+- Bug → `fix/{issue-ref}-{kebab-case-short-desc}`
+- Otherwise → `feat/{issue-ref}-{kebab-case-short-desc}`
 
-### 1b. Project Context
+Read `CLAUDE.md` for project architecture and conventions.
 
-Read these files (use Read tool directly):
-- `AGENTS.md` — architecture, commands, and conventions
-- Relevant `.claude/rules/` files based on the issue topic
+Mark task 1 `completed`.
 
 ---
 
-## Phase 2: Investigation
+## Phase 2: Investigation (Subagent)
 
-Use the `Task` tool with `subagent_type: "Explore"` and thoroughness `"very thorough"` to investigate the codebase.
+Mark task 2 `in_progress`.
 
-The subagent must:
+Delegate to Explore agent:
 
-1. **Find relevant code**: Use Grep/Glob to locate files matching the issue context
-2. **Read the code**: Actually read every file involved — no speculation allowed
-3. **Trace the flow**: Follow the component chain (main.cpp → Robot → LLM → FunctionCall)
-4. **Impact analysis**: List files that need changes, callers, downstream dependencies
+```
+Agent(
+  subagent_type: "Explore",
+  prompt: <include issue details, keywords, ask for "very thorough" investigation>
+)
+```
 
-### No Speculation Principle
-- Every finding must be backed by actual code reading
-- This is embedded C++ — incorrect assumptions cause hard crashes
-- If unsure, read the actual hardware driver code
+The investigator must:
+1. Find relevant code with Grep/Glob
+2. Actually read every involved file — no speculation
+3. Trace the data flow end-to-end
+4. Check existing tests
+5. List files needing changes, callers, downstream dependencies
 
-### Unclear Points
-If anything is ambiguous, use `AskUserQuestion` to ask the user. Do NOT proceed with assumptions.
+### Think Twice
+
+After receiving the report:
+1. Did the investigator actually read the code?
+2. Are there other possible causes not considered?
+3. Is impact analysis complete?
+
+If anything is ambiguous, use `AskUserQuestion`. **Never assume.**
+
+Mark task 2 `completed`.
 
 ---
 
-## Phase 3: Cross-Check (Codex)
+## Phase 3: Ambiguity Resolution
 
-If Codex MCP (`mcp__codex__codex`) is available:
-1. Call `mcp__codex__codex` with investigation results and proposed approach
-2. Ask Codex to verify: root cause, impact, memory implications, hardware safety
+Mark task 3 `in_progress`.
 
-If unavailable: Skip and note it was skipped.
+Use the `/dig` skill with investigation results to resolve decision points.
+
+Mark task 3 `completed`.
+
+---
+
+## Phase 4: Task Decomposition
+
+Mark task 4 `in_progress`.
+
+Use the `/decompose` skill to break the work into ordered subtasks.
+
+Mark task 4 `completed`.
 
 ---
 
 ## ── AskUserQuestion: Approach Confirmation ──
 
 Present to the user:
-1. **Root cause / Implementation plan** (with `file:line` references)
-2. **Impact** (files affected, memory budget impact)
-3. **Proposed approach**
-4. **Codex verification** (if done)
+1. **Decision Matrix** (from /dig)
+2. **Task List** (from /decompose, with dependencies)
+3. **Investigation summary** (key findings)
 
-Ask the user to confirm before proceeding.
+Ask the user to confirm before implementation.
 
 ---
 
-## Phase 4: Branch & Implement
+## Phase 5: Branch & Implement
 
-### 4a. Create Branch
+Mark task 5 `in_progress`.
+
+### 5a. Create Branch
 
 ```bash
 git checkout -b {branch-name}
 ```
 
-### 4b. Implement
+### 5b. Implement
 
-**Guidelines:**
+```
+LOOP for each subtask (in dependency order):
+  1. TaskUpdate → in_progress
+  2. Read target code (MUST read before editing)
+  3. Implement changes (Edit/Write)
+  4. Self-verify (run Verify step from task description)
+  5. TaskUpdate → completed
+
+INTERRUPT conditions:
+  - Unexpected problem → AskUserQuestion
+  - 3 consecutive failures → STOP and report
+```
+
+Guidelines:
 - Follow existing code patterns (read surrounding code first)
-- Follow AGENTS.md conventions
-- Keep changes minimal — no unnecessary refactoring
-- Use `SpiRamJsonDocument` for JSON, `ps_malloc` for large buffers
-- Add `Serial.printf` debug logging for new features
-- Keep Function Call results concise (ESP32 buffer limits)
+- Follow CLAUDE.md conventions
+- Keep changes minimal and focused
+
+Mark task 5 `completed`.
 
 ---
 
-## Phase 5: Build
+## Phase 6: Quality Gate
 
-```bash
-cd firmware && ~/.platformio/penv/bin/pio run -e m5stack-cores3
-```
+Mark task 6 `in_progress`.
 
-Check for:
-- `SUCCESS` in output
-- RAM usage (<80% recommended)
-- Flash usage (<90% recommended)
-- No warnings in new/modified code
+Run the project's build, test, and lint commands as defined in CLAUDE.md's Commands section.
+
+If CLAUDE.md doesn't specify commands, detect from project files:
+- `build.gradle.kts` / `gradlew` → `./gradlew build`, `./gradlew test`, `./gradlew detekt`
+- `package.json` → `npm test`, `npm run lint`
+- `Cargo.toml` → `cargo build`, `cargo test`, `cargo clippy`
+- `pyproject.toml` / `setup.py` → `pytest`, `ruff check`
 
 ### Failure Handling
-- Max 3 fix attempts for build errors
-- If still failing after 3 tries, report to user and stop
+1. Analyze the failure
+2. Fix the issue
+3. Re-run the failing check
+4. **Maximum 3 fix attempts** — if still failing, report to user and stop
+
+Mark task 6 `completed`.
 
 ---
 
-## Phase 6: Commit
+## Phase 7: Review
 
-### ── AskUserQuestion: Commit Confirmation ──
+Mark task 7 `in_progress`.
+
+Use the `/review` skill to run multi-agent parallel review.
+
+### Review Result Handling
+- **Critical**: STOP. Report to user. Do NOT proceed.
+- **Warning**: Fix, re-run Quality Gate (Phase 6)
+- **Suggestion**: Note but don't block
+
+Mark task 7 `completed`.
+
+---
+
+## ── AskUserQuestion: Commit + PR Confirmation ──
 
 Show the user:
-1. Summary of changes (files modified/created)
-2. Build result (RAM/Flash usage)
-3. Proposed commit message
-
-Commit message format:
-- Concise, one line preferred
-- No Co-Authored-By, no AI stamps
-- Reference issue: `refs #N` or `closes #N`
-
-Only after user confirmation:
-
-```bash
-git add {specific files}
-git commit -m "{message}"
-```
+1. Summary of all changes
+2. Quality gate results
+3. Review findings and resolutions
+4. Proposed commit message (single line, no AI stamps)
 
 ---
 
-## Phase 7: PR Creation
+## Phase 8: Commit & PR Creation
 
-### ── AskUserQuestion: PR Creation Confirmation ──
+Mark task 8 `in_progress`.
 
-Show the user branch name, PR title, and target branch. Ask to confirm.
+### 8a. Commit
+```bash
+git add {specific files}
+git commit -m "{concise message}"
+```
+- Explicit file staging (no `git add .`)
+- No Co-Authored-By, no AI stamps
 
-Only after confirmation:
-
+### 8b. Push & PR
 ```bash
 git push -u origin {branch-name}
 ```
 
-```bash
-gh pr create --repo rioX432/desk-secretary-bot --title "{PR title}" --body "$(cat <<'EOF'
-## Description
+Use the project's `pull_request_template.md` if available. Only fill in Description and Related Issues.
 
+```bash
+gh pr create --title "#{issue} {description}" --body "$(cat <<'EOF'
+## Description
 - {bullet point summary}
 
 ## Related Issues
-
-{Closes #N}
-
-## Test Plan
-
-- [x] {how it was tested — build success, serial monitor, hardware test}
-
-## Review Checklist
-
-- [x] Memory usage checked (heap/PSRAM within budget)
-- [x] No secrets committed (API keys, Wi-Fi passwords)
-- [x] Tested on CoreS3 hardware (or build-only if no device)
-- [x] Existing features not broken
-
-## Breaking Changes
-
-None
+Closes #{issue}
 EOF
 )"
 ```
 
-Print the PR URL.
+Report PR URL to the user.
+
+Mark task 8 `completed`.
 
 ---
 
@@ -228,8 +291,10 @@ Print the PR URL.
 | Situation | Action |
 |-----------|--------|
 | Issue not found | Report error, stop |
+| Figma fetch fails | Warn, continue without design |
 | Investigation unclear | AskUserQuestion before proceeding |
-| Codex unavailable | Skip, note it was skipped |
-| Build fails (≤3 attempts) | Fix and retry |
-| Build fails (>3 attempts) | Report to user, stop |
-| RAM/Flash >90% | Warn user before proceeding |
+| Tests fail (≤3 attempts) | Fix and retry |
+| Tests fail (>3 attempts) | Report to user, stop |
+| Critical review finding | Report to user, stop |
+| Warning review finding | Fix, re-run quality gate |
+| Git/PR creation fails | Report error, stop |
