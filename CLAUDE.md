@@ -2,6 +2,17 @@
 
 Strictly follow the rules in [AGENTS.md](./AGENTS.md).
 
+## Core Values
+
+1. **ゼロレイテンシの音声対話** — Realtime APIで音声入力→音声応答を直結、自然な会話テンポ
+2. **ネット不要で完全ローカル動作** — Module LLMでSTT/LLM/TTS全てオンデバイス実行
+3. **デスクに置ける小さなAI秘書** — M5Stack上で動く、常時待機の物理的存在感
+
+## Won't Do
+- **スマートホーム制御** — デスク秘書であり、ホームオートメーションハブではない
+- **クラウドLLM依存の機能** — Core Value②に反する。ローカル動作が前提
+- **汎用ロボティクス機能（移動/マニピュレーション）** — M5Stack上の固定デスクデバイス。動くロボットにしない
+
 ## Think Twice
 
 Before acting, always pause and reconsider. Re-read the requirements, re-check your assumptions, and verify your approach is correct before writing any code.
