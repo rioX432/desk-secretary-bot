@@ -11,6 +11,7 @@
     "investigate",
     "issue",
     "monitor",
+    "orchestrate",
     "pr",
     "review",
     "think",
@@ -32,5 +33,9 @@
     "behavior.md",
     "coding-conventions.md",
     "iot-conventions.md"
+  ],
+  "adapters": [
+    "claude",
+    "codex"
   ]
 }
