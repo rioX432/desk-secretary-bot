@@ -32,7 +32,8 @@
     "ai-ops.md",
     "behavior.md",
     "coding-conventions.md",
-    "iot-conventions.md"
+    "iot-conventions.md",
+    "standalone-orchestration.md"
   ],
   "adapters": [
     "claude",
