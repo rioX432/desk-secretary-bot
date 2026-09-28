@@ -8,6 +8,7 @@
     "dev-all",
     "dev-investigate",
     "dig",
+    "implement-guidance",
     "investigate",
     "issue",
     "monitor",
@@ -32,10 +33,14 @@
     "ai-ops.md",
     "behavior.md",
     "coding-conventions.md",
-    "iot-conventions.md"
+    "core-value-filter.md",
+    "iot-conventions.md",
+    "standalone-orchestration.md",
+    "verification.md"
   ],
   "adapters": [
     "claude",
     "codex"
-  ]
+  ],
+  "consumption": "sync"
 }
